@@ -1,0 +1,14 @@
+# Build artifacts and local state that must not enter the image build context.
+.git
+.github
+bin/
+web/node_modules/
+web/dist/*.wasm
+web/dist/*.js
+web/dist/*.css
+*.db
+*.db-wal
+*.db-shm
+*.pepper
+deployments/
+docs/

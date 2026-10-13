@@ -1,0 +1,66 @@
+# Underflow cloud deployment: app + PostgreSQL + Caddy (TLS termination).
+#
+# Usage:
+#   export UF_SERVER_PEPPER=$(openssl rand -hex 32)
+#   export POSTGRES_PASSWORD=$(openssl rand -hex 16)
+#   export UF_DOMAIN=passwords.example.com
+#   docker compose -f deployments/docker-compose.yml up -d --build
+#
+# Never reuse UF_SERVER_PEPPER: it is required to verify master passwords and
+# must stay stable across restarts and backups.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: underflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: underflow
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U underflow -d underflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published; only reachable on the compose network.
+
+  app:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    restart: unless-stopped
+    environment:
+      UF_LISTEN_ADDR: 0.0.0.0:8080
+      UF_DB_DRIVER: postgres
+      UF_DB_DSN: postgres://underflow:${POSTGRES_PASSWORD}@db:5432/underflow?sslmode=disable
+      UF_SERVER_PEPPER: ${UF_SERVER_PEPPER:?set UF_SERVER_PEPPER to a 32-byte hex secret}
+      UF_REGISTRATION: ${UF_REGISTRATION:-closed}
+      UF_SESSION_TTL: 12h
+      UF_LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      UF_DOMAIN: ${UF_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

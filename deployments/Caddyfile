@@ -1,0 +1,11 @@
+# Caddy reverse proxy with automatic HTTPS.
+# Set UF_DOMAIN to the public hostname; Caddy obtains and renews certificates.
+{$UF_DOMAIN:localhost} {
+	encode zstd gzip
+
+	# The WASM bundle is large; cache it aggressively.
+	@wasm path /underflow.wasm /wasm_exec.js
+	header @wasm Cache-Control "public, max-age=86400"
+
+	reverse_proxy app:8080
+}

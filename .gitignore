@@ -1,0 +1,30 @@
+# Binaries
+/bin/
+/dist/
+underflow
+*.exe
+
+# Frontend build artifacts (index.html placeholder is kept so go:embed always works)
+web/dist/*
+!web/dist/index.html
+web/node_modules/
+
+# Local data / secrets
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+.env
+*.pem
+*.key
+
+# Test / coverage
+coverage.out
+*.test
+fuzz-corpus/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

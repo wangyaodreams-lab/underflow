@@ -1,0 +1,344 @@
+openapi: 3.0.3
+info:
+  title: Underflow API
+  version: "1"
+  description: |
+    Zero-knowledge password manager API. All binary fields are standard base64.
+    Item and vault-name payloads are opaque ciphertext produced by the client;
+    the server never receives plaintext or the master password.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+
+paths:
+  /auth/kdf:
+    get:
+      summary: Fetch KDF parameters for an email (pre-login).
+      security: []
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        "200":
+          description: KDF parameters. Unknown emails receive a deterministic decoy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kdf: { $ref: "#/components/schemas/KDF" }
+
+  /auth/register:
+    post:
+      summary: Create an account and its default vault.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, kdf, authKey, vaultId, alg, vaultNameEnc, protectedVaultKey]
+              properties:
+                email: { type: string, format: email }
+                kdf: { $ref: "#/components/schemas/KDF" }
+                authKey: { type: string, description: "base64, 32 bytes" }
+                vaultId: { type: string }
+                alg: { type: integer, enum: [1, 2] }
+                vaultNameEnc: { type: string, description: "base64 ciphertext" }
+                protectedVaultKey: { type: string, description: "base64 key envelope" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /auth/login:
+    post:
+      summary: Verify the derived AuthKey and open a session.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, authKey]
+              properties:
+                email: { type: string, format: email }
+                authKey: { type: string, description: "base64, 32 bytes" }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /auth/logout:
+    post:
+      summary: Revoke the current session.
+      responses:
+        "200": { $ref: "#/components/responses/OK" }
+
+  /auth/password:
+    post:
+      summary: Change the master password and re-wrap vault keys.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kdf, authKey, vaults]
+              properties:
+                kdf: { $ref: "#/components/schemas/KDF" }
+                authKey: { type: string }
+                vaults:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, alg, protectedVaultKey]
+                    properties:
+                      id: { type: string }
+                      alg: { type: integer }
+                      protectedVaultKey: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/OK" }
+
+  /user:
+    get:
+      summary: Current account metadata.
+      responses:
+        "200":
+          description: Account metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId: { type: string }
+                  email: { type: string }
+                  kdf: { $ref: "#/components/schemas/KDF" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /vaults:
+    get:
+      summary: List the current user's vaults.
+      responses:
+        "200":
+          description: Vaults
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vaults:
+                    type: array
+                    items: { $ref: "#/components/schemas/Vault" }
+
+  /vaults/{id}:
+    parameters:
+      - $ref: "#/components/parameters/VaultId"
+    get:
+      summary: Get one vault.
+      responses:
+        "200":
+          description: Vault
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vault" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /vaults/{id}/items:
+    parameters:
+      - $ref: "#/components/parameters/VaultId"
+    post:
+      summary: Create an encrypted item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, blob]
+              properties:
+                id: { type: string }
+                blob: { type: string, description: "base64 ciphertext" }
+      responses:
+        "201":
+          description: Created item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /vaults/{id}/items/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/VaultId"
+      - $ref: "#/components/parameters/ItemId"
+    get:
+      summary: Get one item.
+      responses:
+        "200":
+          description: Item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Replace an item's ciphertext (optimistic concurrency).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blob, baseRevision]
+              properties:
+                blob: { type: string }
+                baseRevision: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Tombstone an item.
+      parameters:
+        - in: query
+          name: revision
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Tombstone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /sync:
+    get:
+      summary: Items changed since a revision, plus the current revision.
+      parameters:
+        - in: query
+          name: since
+          schema: { type: integer, format: int64, default: 0 }
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Item" }
+                  revision: { type: integer, format: int64 }
+
+  /healthz:
+    get:
+      summary: Liveness probe.
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/OK" }
+
+  /readyz:
+    get:
+      summary: Readiness probe.
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/OK" }
+        "503": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: uf_session
+  parameters:
+    VaultId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string }
+    ItemId:
+      in: path
+      name: itemId
+      required: true
+      schema: { type: string }
+  schemas:
+    KDF:
+      type: object
+      required: [id, m, t, p, salt]
+      properties:
+        id: { type: integer, example: 1 }
+        m: { type: integer, example: 65536, description: "memory in KiB" }
+        t: { type: integer, example: 3 }
+        p: { type: integer, example: 4 }
+        salt: { type: string, description: "base64, 16 bytes" }
+    Vault:
+      type: object
+      properties:
+        id: { type: string }
+        alg: { type: integer }
+        nameEnc: { type: string }
+        protectedVaultKey: { type: string }
+        revision: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    Item:
+      type: object
+      properties:
+        id: { type: string }
+        vaultId: { type: string }
+        revision: { type: integer, format: int64 }
+        blob: { type: string, description: "base64 ciphertext" }
+        deleted: { type: boolean }
+        updatedAt: { type: integer, format: int64 }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    OK:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: { type: boolean }
+    Session:
+      description: Authenticated session
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              userId: { type: string }
+              email: { type: string }
+              kdf: { $ref: "#/components/schemas/KDF" }
+              token: { type: string, description: "present for CLI clients only" }
+              csrf: { type: string }
+      headers:
+        Set-Cookie:
+          schema: { type: string }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

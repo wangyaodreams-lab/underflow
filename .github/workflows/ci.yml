@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+      - name: Format check
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Vet
+        run: go vet ./...
+      - name: Test (race)
+        run: go test -race ./...
+      - name: Cross compile (CGO disabled)
+        run: |
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o /dev/null ./cmd/underflow
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o /dev/null ./cmd/underflow
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/underflow
+      - name: Build WASM core
+        run: GOOS=js GOARCH=wasm go build -trimpath -o /tmp/underflow.wasm ./wasm
+      - name: Test WASM bridge under Node
+        run: GOOS=js GOARCH=wasm go test -exec "$(go env GOROOT)/lib/wasm/go_js_wasm_exec" ./wasm/
+      - name: Fuzz (short)
+        run: |
+          go test ./crypto/ -run '^$' -fuzz FuzzEnvelopeDecode -fuzztime 15s
+          go test ./crypto/ -run '^$' -fuzz FuzzBlobRoundTrip -fuzztime 15s
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  vulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  postgres:
+    name: PostgreSQL contract tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: underflow
+          POSTGRES_PASSWORD: underflow
+          POSTGRES_DB: underflow
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U underflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+      - name: Contract tests against PostgreSQL
+        env:
+          UF_TEST_PG_DSN: postgres://underflow:underflow@localhost:5432/underflow?sslmode=disable
+        run: go test ./internal/store/... -count=1

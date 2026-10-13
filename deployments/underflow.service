@@ -1,0 +1,40 @@
+[Unit]
+Description=Underflow zero-knowledge password manager
+Documentation=https://github.com/wangyaodreams-lab/underflow
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=underflow
+Group=underflow
+# Create /etc/underflow/underflow.env (0600) with at least:
+#   UF_SERVER_PEPPER=<32-byte hex>
+#   UF_DB_DRIVER=sqlite
+#   UF_DB_DSN=/var/lib/underflow/underflow.db
+EnvironmentFile=/etc/underflow/underflow.env
+ExecStart=/usr/local/bin/underflow serve
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/var/lib/underflow
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Note: MemoryDenyWriteExecute is left false because Go's runtime and the
+# crypto code may require writable-executable mappings on some kernels.
+
+[Install]
+WantedBy=multi-user.target
