@@ -20,6 +20,7 @@
 | XSS / malicious page | Steal session or keys | Strict CSP without `unsafe-inline`, no third-party resources, session cookie is `HttpOnly`+`SameSite=Strict`, keys are memory-only, CSRF double-submit. |
 | Offline attacker with stolen backup | Crack passwords | Argon2id + pepper separation. |
 | Replay / tampering at rest | Swap or corrupt ciphertext | AAD binds each ciphertext to vault/item ids; decoders fail closed. |
+| Rate-limit bypass (multi-instance) | Bypass login rate limits across processes | In-memory limiter is per-process; deploy behind a reverse proxy limiter or replace `internal/auth/limiter.go` with a shared store-backed limiter. |
 
 ## Trust boundaries
 
@@ -34,6 +35,7 @@
 - Integrity and confidentiality of stored items and wrapped keys.
 - Resistance to offline password cracking in the event of database theft.
 - Safe defaults for sessions, headers and registration.
+- In-memory rate limiting for single-instance deployments.
 
 ## Out of scope (for now)
 
@@ -43,6 +45,11 @@
 - Denial of service.
 - Cross-user sharing (Phase 2, will use X25519 key wrapping).
 - OPAQUE-based authentication (Phase 2).
+- Rate limit coordination across multiple server instances (requires shared
+  store-backed limiter; see SECURITY.md).
+- Swap / core dump memory disclosure (mitigated by disabling swap and core
+  dumps; Linux `mlock(2)` with `go build -tags=mlock` provides best-effort
+  pinning).
 
 ## Verification
 
@@ -52,3 +59,6 @@
 - Fuzzing of the envelope decoders and the item round trip.
 - An end-to-end test that asserts the on-disk database and server logs never
   contain a canary secret, the master password or a vault key.
+- `go vet ./...` and `gofmt -l .` (CI) enforce code quality and formatting.
+- Multi-tenant isolation is tested by querying vault items from another user's
+  context and asserting 404 responses (see `internal/cli/cli_test.go`).

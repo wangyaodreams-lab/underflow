@@ -191,6 +191,9 @@ printf 'NewPass!42\n' | underflow item edit example.com --password-stdin
 
 标志：`--name`、`--username`、`--url`、`--notes`、`--generate`、`--length`、`--password-stdin`（仅对显式给出的字段生效；至少需改动一项）。
 
+> `item edit` 的 `--generate` 会生成新密码并自动追加到 `passwordHistory`
+> 中，旧密码的哈希值（客户端侧）会保留在历史记录里，方便审计。
+
 删除：
 
 ```bash
@@ -207,6 +210,11 @@ underflow sync
 ```
 
 `sync` 从服务端拉取当前全部条目并统计（删除项计入 deleted）。`item list/get` 等命令在读取时会自行解密最新数据。
+
+Web 端和 `item edit` 的 PUT 操作使用乐观并发控制（`baseRevision`）：
+- 服务端返回的每个条目附带 `revision` 和 `updatedAt` 时间戳。
+- 编辑时客户端发送当前 revision，若已过期（409 `revision_conflict`），需先 `sync` 再重新编辑。
+- 删除（DELETE）同样需要 revision；失败时服务端返回 409。
 
 ### 4.7 密码生成器
 
@@ -244,6 +252,32 @@ underflow password
 ```
 
 修改后会自动用新密钥重新包裹保险库密钥，并撤销其它设备的会话（当前会话保留）。之后请用新主密码 `unlock`。
+
+> **注意：** `password` 命令会重新派生一个全新的 KDF 盐（新的 Argon2 参数），
+> 并将旧参数丢弃。这意味着该账号从此使用新的 KDF 参数。若之后升级 KDF 策略
+>（例如从 `interactive` 到 `paranoid`），登录时会自动检测到参数差异并重新派生。
+
+### 4.10 配置文件详解
+
+CLI 配置存储于 `~/.config/underflow/`（可用 `--config-dir` 或 `UNDERFLOW_CONFIG_DIR` 覆盖）：
+
+- `config.toml`：非敏感配置，格式为 `key = "value"`（TOML 子集），例如：
+  ```
+  server = "http://127.0.0.1:8080"
+  email = "alice@example.com"
+  device_id = "a1b2c3d4..."
+  ```
+- `secrets.json`：敏感会话材料（0600 权限），结构为：
+  ```json
+  {
+    "token": "会话令牌",
+    "kdf": { "id": 1, "m": 65536, "t": 3, "p": 4, "salt": "base64编码的16字节盐" },
+    "alg": 1,
+    "vaults": [ { "id": "uuid", "alg": 1, "key": "base64编码的32字节密钥" } ],
+    "lastRevision": 42
+  }
+  ```
+  `lock` 会移除 `vaults` 数组；`logout` 会移除 `token` 和 `vaults`。
 
 ---
 

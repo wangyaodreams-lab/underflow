@@ -38,10 +38,16 @@ key-encryption key, vault keys, or any plaintext item field.
 - Set `UF_REGISTRATION=closed` after creating accounts, or use `invite`.
 - Disable swap and core dumps on the host. Go cannot guarantee that secret
   buffers are wiped before garbage collection, so limit how long keys live in
-  memory (auto-lock) and avoid paging.
+  memory (auto-lock) and avoid paging. On Linux, compile with
+  `-tags=mlock` to pin secret buffers with `mlock(2)` (best effort, may fail
+  under memory pressure).
 - Restrict access to the database and backups.
 - Publish the exact build (commit + checksum) so browser clients can verify the
   served frontend, since a compromised server can serve malicious JavaScript.
+- The rate limiter is **in-memory** (fixed-window, ~10 attempts per 5 min).
+  For multi-instance deployments this provides no protection across processes;
+  use a reverse-proxy rate limiter or replace `internal/auth/limiter.go` with a
+  shared store-backed implementation.
 
 ## Browser threat model caveat
 
@@ -71,5 +77,8 @@ cannot be replayed or swapped between items or vaults.
   attempt an offline brute-force of weak master passwords. Planned mitigation:
   OPAQUE (RFC 9807).
 - Go's garbage collector may copy secret bytes, so memory zeroing is
-  best-effort.
+  best-effort. Deployments should disable swap and core dumps. Linux builds
+  can use `go build -tags=mlock` to pin secret buffers with `mlock(2)`.
 - In-memory rate limiting does not coordinate across multiple instances.
+  Multi-instance deployments need an external rate limiter (reverse proxy) or
+  a shared store-backed limiter replacing `internal/auth/limiter.go`.

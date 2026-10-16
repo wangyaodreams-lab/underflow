@@ -46,7 +46,12 @@ account. A server pepper is generated next to the database on first run.
 ./bin/underflow export --format json > backup.json
 ./bin/underflow lock          # forget cached keys
 ./bin/underflow unlock        # re-derive keys from the master password
+./bin/underflow password      # change master password (re-wraps vault keys)
 ```
+
+> **No `--password` flag.** Master passwords are always entered interactively
+> (hidden) or via standard input (`--password-stdin`) to avoid leaking into
+> shell history.
 
 ## Cloud deployment
 
@@ -76,6 +81,37 @@ docker compose -f deployments/docker-compose.yml up -d --build
 
 In one line: the server holds only public KDF parameters, a password verifier
 protected by a server-side pepper, wrapped vault keys and encrypted items.
+
+## Configuration
+
+### CLI config (local state)
+
+The CLI persists two files under `~/.config/underflow/` (overridable via
+`--config-dir` or `UNDERFLOW_CONFIG_DIR`):
+
+| File | Content | Format |
+|---|---|---|
+| `config.toml` | `server`, `email`, `device_id` | simple `key = "value"` (TOML-like, no quotes) |
+| `secrets.json` | session token, KDF params, cached vault keys | JSON (encrypted in memory, 0600 on disk) |
+
+### Server environment variables
+
+All server flags can be set via environment variables. The CLI `--help` for
+`serve` lists the full set; the table below covers the most important ones:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `UF_LISTEN_ADDR` | `127.0.0.1:8080` | bind address |
+| `UF_DB_DRIVER` | `sqlite` | `sqlite` or `postgres` |
+| `UF_DB_DSN` | `underflow.db` | file path or PostgreSQL connection string |
+| `UF_SERVER_PEPPER` | — | server-side secret for verifier protection; >= 32 bytes hex (or raw) |
+| `UF_REGISTRATION` | `open` | `open`, `closed`, or `invite` (requires `UF_INVITE_CODE`) |
+| `UF_ARGON2_PROFILE` | `interactive` | `interactive` (64 MiB) / `moderate` (256 MiB) / `paranoid` (1 GiB) |
+| `UF_SESSION_TTL` | `12h` | session lifetime |
+| `UF_LOG_LEVEL` | `info` | `debug` or `info` |
+
+See [DEPLOY.md](docs/DEPLOY.md) for the full table (including TLS, rate-limit
+proxy, and trusted-proxies settings).
 
 ## Development
 

@@ -100,3 +100,38 @@ no automatic rollback of migrations, so take a database backup first.
 
 - `GET /api/v1/healthz` — liveness, always 200 while the process runs.
 - `GET /api/v1/readyz` — readiness, checks datastore connectivity.
+
+## Configuration flags vs. environment variables
+
+Every `underflow serve` flag has a corresponding `UF_` environment variable:
+
+```bash
+--listen 0.0.0.0:8080    →  UF_LISTEN_ADDR=0.0.0.0:8080
+--driver postgres         →  UF_DB_DRIVER=postgres
+--dsn "..."               →  UF_DB_DSN="..."
+--registration closed     →  UF_REGISTRATION=closed
+--profile moderate        →  UF_ARGON2_PROFILE=moderate
+--session-ttl 8h          →  UF_SESSION_TTL=8h
+--log-level debug         →  UF_LOG_LEVEL=debug
+--tls-cert cert.pem       →  UF_TLS_CERT=cert.pem
+--tls-key key.pem         →  UF_TLS_KEY=key.pem
+--insecure                →  UF_INSECURE=1
+```
+
+CLI flags always take precedence over environment variables.
+
+## Rate limiting
+
+Underflow uses an **in-memory** fixed-window rate limiter (default: 5 min / 10
+attempts per IP + account). This is sufficient for single-instance deployments
+but does not coordinate across multiple processes. For multi-instance deployments,
+place the app behind a reverse proxy (Nginx, Caddy) that implements rate
+limiting, or replace `internal/auth/limiter.go` with a shared store-backed
+limiter.
+
+## In-memory limiter caveat
+
+The rate limiter lives in process memory only. After a crash or restart, all
+rate-limit counters are lost. This means an attacker who repeatedly triggers
+locks (e.g., wrong passwords) can "wait out" the limit if the service restarts.
+For high-security deployments, monitor failed-login patterns externally.
