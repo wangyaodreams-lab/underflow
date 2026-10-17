@@ -5,6 +5,8 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildLauncher } from "./esbuild.launcher.mjs";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = resolve(here, "dist");
 mkdirSync(dist, { recursive: true });
@@ -29,5 +31,7 @@ await esbuild.build({
   minify: true,
   logLevel: "info",
 });
+
+await buildLauncher();
 
 console.log("frontend built into web/dist");

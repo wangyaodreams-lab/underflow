@@ -4,7 +4,7 @@ BIN := bin/underflow
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 
-.PHONY: all build web wasm test test-race fuzz lint vet clean docker e2e fmt tidy cross
+.PHONY: all build build-go web launcher wasm test test-race fuzz lint vet clean docker e2e fmt tidy cross
 
 all: build
 
@@ -19,6 +19,10 @@ build-go:
 ## web: bundle the TypeScript frontend with esbuild
 web:
 	cd web && npm install --no-audit --no-fund && npm run build
+
+## launcher: rebuild only the launcher UI (web/src/launcher)
+launcher:
+	cd web && npm run build:launcher
 
 ## wasm: compile the crypto core to js/wasm and copy wasm_exec.js
 wasm:

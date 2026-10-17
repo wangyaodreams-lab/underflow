@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node esbuild.mjs",
-    "typecheck": "tsc --noEmit"
+    "build:launcher": "node build-launcher.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.launcher.json"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
