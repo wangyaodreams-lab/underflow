@@ -9,6 +9,10 @@ web/dist/*
 !web/dist/index.html
 web/node_modules/
 
+# Launcher UI build artifact (the placeholder index.html is committed)
+internal/launcher/dist/*
+!internal/launcher/dist/index.html
+
 # Local data / secrets
 *.db
 *.db-shm

@@ -36,6 +36,44 @@ make build                 # builds the frontend, WASM core and the binary
 `--local` binds to loopback and disables registration after you create your
 account. A server pepper is generated next to the database on first run.
 
+### Launcher (visual configuration)
+
+Every server parameter can be set through a local web interface instead of
+flags and environment variables:
+
+```bash
+./bin/underflow launcher
+# opens http://127.0.0.1:8090
+```
+
+The launcher resolves the settings into the same `UF_*` environment contract
+that `underflow serve` reads, validates them against the server's own rules,
+shows the exact command it will run, then supervises the server and streams its
+log output back into the page.
+
+- **Parameters**: listener, SQLite/PostgreSQL, server pepper handling,
+  registration mode and invite code, Argon2id profile, session lifetime, TLS
+  certificate/key, trusted proxies, log level and insecure mode.
+- **Pepper**: shown by path and fingerprint, never by value. Generate one with
+  a click; the launcher writes it `0600` next to the database (or wherever you
+  point it).
+- **Control**: start, stop, restart and "open app", with live status and logs.
+- **Persistence**: settings are saved to `launcher.json` in the config
+  directory (`--state-dir`, default `~/.config/underflow`), so the next run
+  starts from them.
+
+The launcher binds to loopback only and rejects requests from any other origin.
+It is a local development and single-machine operations convenience; for
+production use the environment variables below directly.
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--addr` | `127.0.0.1:8090` | launcher UI address; moves to the next free port if busy |
+| `--work-dir` | current directory | where the server runs and relative paths resolve |
+| `--state-dir` | `~/.config/underflow` | where `launcher.json` is stored |
+| `--binary` | this executable | the binary spawned for `serve` |
+| `--open` | `true` | open the launcher in a browser |
+
 ### CLI
 
 ```bash
@@ -109,6 +147,9 @@ All server flags can be set via environment variables. The CLI `--help` for
 | `UF_ARGON2_PROFILE` | `interactive` | `interactive` (64 MiB) / `moderate` (256 MiB) / `paranoid` (1 GiB) |
 | `UF_SESSION_TTL` | `12h` | session lifetime |
 | `UF_LOG_LEVEL` | `info` | `debug` or `info` |
+
+`serve` also accepts `--session-ttl` and `--log-level` alongside the flags
+listed by `underflow serve --help`.
 
 See [DEPLOY.md](docs/DEPLOY.md) for the full table (including TLS, rate-limit
 proxy, and trusted-proxies settings).

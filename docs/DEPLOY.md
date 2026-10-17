@@ -118,7 +118,24 @@ Every `underflow serve` flag has a corresponding `UF_` environment variable:
 --insecure                →  UF_INSECURE=1
 ```
 
-CLI flags always take precedence over environment variables.
+CLI flags always take precedence over environment variables, and both take
+precedence over the built-in defaults.
+
+### Local launcher
+
+`underflow launcher` starts a loopback-only web interface for the same
+parameters, useful when you would rather not assemble the environment by hand:
+
+```bash
+./bin/underflow launcher        # http://127.0.0.1:8090
+```
+
+It validates the settings with the same rules the server applies, renders the
+exact `UF_*` command it will run, then starts and supervises `underflow serve`,
+streaming its logs into the page. It is a local convenience: production
+deployments should keep setting the environment directly (for example in the
+systemd unit or Compose file), where the values are version-controlled and
+supervised by the platform.
 
 ## Rate limiting
 
