@@ -6,10 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/wangyaodreams-lab/underflow/crypto"
 	"github.com/wangyaodreams-lab/underflow/internal/config"
 	"github.com/wangyaodreams-lab/underflow/internal/server"
 	"github.com/wangyaodreams-lab/underflow/internal/store"
@@ -31,6 +34,8 @@ func newServeCmd() *cobra.Command {
 	f.String("dsn", "", "database DSN / file path")
 	f.String("registration", "", "registration mode: open|closed|invite")
 	f.String("profile", "", "argon2 profile: interactive|moderate|paranoid")
+	f.String("session-ttl", "", "session lifetime, e.g. 12h")
+	f.String("log-level", "", "log level: debug|info")
 	f.String("tls-cert", "", "TLS certificate file")
 	f.String("tls-key", "", "TLS key file")
 	f.Bool("local", false, "local single-user mode (bind loopback, registration closed)")
@@ -56,7 +61,22 @@ func runServe(cmd *cobra.Command) error {
 		cfg.Registration = config.RegistrationMode(v)
 	}
 	if v := getFlag(cmd, "profile"); v != "" {
-		cfg.Argon2Profile = v
+		switch crypto.Profile(strings.ToLower(v)) {
+		case crypto.ProfileInteractive, crypto.ProfileModerate, crypto.ProfileParanoid:
+			cfg.Argon2Profile = strings.ToLower(v)
+		default:
+			return fmt.Errorf("invalid --profile %q: use interactive, moderate or paranoid", v)
+		}
+	}
+	if v := getFlag(cmd, "session-ttl"); v != "" {
+		ttl, err := time.ParseDuration(v)
+		if err != nil || ttl <= 0 {
+			return fmt.Errorf("invalid --session-ttl %q: use a positive duration such as 12h", v)
+		}
+		cfg.SessionTTL = ttl
+	}
+	if v := getFlag(cmd, "log-level"); v != "" {
+		cfg.LogLevel = strings.ToLower(v)
 	}
 	if v := getFlag(cmd, "tls-cert"); v != "" {
 		cfg.TLSCert = expandPath(v)
@@ -66,7 +86,11 @@ func runServe(cmd *cobra.Command) error {
 	}
 	if getBool(cmd, "local") {
 		cfg.Registration = config.RegistrationClosed
-		if getFlag(cmd, "listen") == "" {
+		// Only redirect the listener when the address was left unset. An
+		// explicit --listen flag or UF_LISTEN_ADDR must win, otherwise the
+		// documented environment-variable configuration silently binds the
+		// wrong port.
+		if getFlag(cmd, "listen") == "" && os.Getenv("UF_LISTEN_ADDR") == "" {
 			cfg.ListenAddr = "127.0.0.1:8080"
 		}
 	}
